@@ -9,9 +9,9 @@ import type {
   LoginResult,
   ProfileParams,
   RegisterParams,
+  UserProfileResult,
 } from './types';
 import { get, post, postEncrypt } from '@/utils/request';
-import type { UserState } from '@/store/modules/user/types';
 import type { CommonResult } from '@/api/common/types';
 
 enum URL {
@@ -23,7 +23,7 @@ enum URL {
   profile = '/system/user/profile',
 }
 
-export const getUserProfile = (params?: ProfileParams) => get<UserState>({ url: URL.profile, params });
+export const getUserProfile = (params?: ProfileParams) => get<UserProfileResult>({ url: URL.profile, params });
 /**
  * 密码登录
  */

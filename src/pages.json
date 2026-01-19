@@ -12,7 +12,8 @@
     {
       "path": "pages/tab/home/index",
       "style": {
-        "navigationBarTitleText": "首页"
+        "navigationBarTitleText": "首页",
+        "navigationStyle": "custom"
       }
     },
     {
@@ -34,11 +35,22 @@
       "pages": [
         {
           "path": "login/index",
-          "navigationStyle": "custom"
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
+          "path": "search/index",
+          "style": {
+            "navigationBarTitleText": "搜索",
+            "navigationStyle": "custom"
+          }
         },
         {
           "path": "webview/index",
-          "navigationBarTitleText": "网页"
+          "style": {
+            "navigationBarTitleText": "网页"
+          }
         }
       ]
     }
@@ -56,13 +68,17 @@
     "backgroundColor": "#ffffff",
     "list": [{
       "pagePath": "pages/tab/home/index",
-      "text": "首页"
+      "text": "首页",
+      "iconPath": "static/images/tabbar/home_cur.png",
+      "selectedIconPath": "static/images/tabbar/home_cur.png"
     }, {
       "pagePath": "pages/tab/list/index",
       "text": "列表"
     }, {
       "pagePath": "pages/tab/user/index",
-      "text": "我的"
+      "text": "我的",
+      "iconPath": "static/images/tabbar/me.png",
+      "selectedIconPath": "static/images/tabbar/me.png"
     }]
   },
   "globalStyle": {

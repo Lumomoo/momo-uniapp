@@ -7,9 +7,11 @@ import { clearToken, setToken } from '@/utils/auth';
 const useUserStore = defineStore('user', {
   state: (): UserState => ({
     user_id: '',
-    user_name: '江阳小道',
+    user_name: '',
     avatar: '',
     token: '',
+    user: null,
+    profile: null,
   }),
   getters: {
     userInfo(state: UserState): UserState {
@@ -28,7 +30,15 @@ const useUserStore = defineStore('user', {
     // 获取用户信息
     async info() {
       const result = await UserApi.getUserProfile();
-      this.setInfo(result);
+      const profile = result.userProfiles || null;
+      const user = result.user || null;
+      this.setInfo({
+        user,
+        profile,
+        user_id: user?.userId ? String(user.userId) : this.user_id,
+        user_name: profile?.nickname || user?.nickName || user?.userName || this.user_name || '',
+        avatar: profile?.avatarUrl || user?.avatar || this.avatar || '',
+      });
     },
     // 异步登录并存储token
     login(loginForm: LoginParams) {

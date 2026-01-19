@@ -1,0 +1,371 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HealthTrack AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            background-color: #f7f8fa;
+            user-select: none;
+            overflow-x: hidden;
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Animations */
+        @keyframes slideInDown {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .animate-slide-down { animation: slideInDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+        
+        .calendar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 60;
+        }
+        .calendar-overlay.active { display: block; }
+        
+        .week-strip-container {
+            scroll-snap-type: x mandatory;
+        }
+        .week-day-item {
+            scroll-snap-align: center;
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-[#f7f8fa]">
+    <div class="max-w-md mx-auto min-h-screen flex flex-col relative bg-[#f7f8fa]">
+        
+        <!-- Header -->
+        <header class="flex items-center justify-between px-4 py-3 bg-white sticky top-0 z-50">
+            <button class="p-1"><i data-lucide="chevron-left" class="text-gray-800"></i></button>
+            <button id="today-btn" class="flex items-center gap-1 bg-gray-100 px-6 py-1.5 rounded-full active:bg-gray-200 transition-colors">
+                <span class="text-sm font-medium text-gray-700">今天</span>
+                <i data-lucide="chevron-down" id="today-chevron" class="text-gray-500 w-4 h-4"></i>
+            </button>
+            <div class="flex gap-4">
+                <button class="p-1"><i data-lucide="share-2" class="text-gray-800 w-5 h-5"></i></button>
+                <button class="p-1"><i data-lucide="settings" class="text-gray-800 w-5 h-5"></i></button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-1 px-4 pb-32">
+            <!-- Week Strip -->
+            <div id="week-strip" class="w-full overflow-x-auto hide-scrollbar week-strip-container py-4 mb-2 flex">
+                <!-- Injected by JS -->
+            </div>
+            
+            <!-- Nutrition Card -->
+            <div class="bg-white rounded-3xl p-5 shadow-sm mb-4">
+                <div class="flex items-center justify-between mb-8">
+                    <div class="flex gap-4">
+                        <button class="flex items-center text-xs font-semibold text-gray-700">
+                            <span class="bg-blue-100 text-blue-500 text-[10px] px-1 rounded mr-1">GLP</span>
+                            GLP饮食 <i data-lucide="chevron-right" class="w-3 h-3"></i>
+                        </button>
+                        <button class="flex items-center text-xs font-semibold text-gray-700">
+                            <span class="mr-1">🍳</span>
+                            动态食谱 <i data-lucide="chevron-right" class="w-3 h-3"></i>
+                        </button>
+                    </div>
+                    <i data-lucide="chevron-up" class="text-gray-300 w-4 h-4"></i>
+                </div>
+
+                <div class="flex justify-between items-center mb-10 px-2">
+                    <div class="text-center w-20">
+                        <p class="text-xs text-gray-400 mb-1">饮食摄入</p>
+                        <p class="text-2xl font-bold text-gray-800">0</p>
+                    </div>
+
+                    <div class="relative w-40 h-40 flex flex-col items-center justify-center">
+                        <svg class="absolute w-full h-full -rotate-90" viewBox="0 0 160 160">
+                            <circle cx="80" cy="80" r="64" fill="none" stroke="#f1f5f9" stroke-width="12" />
+                            <circle cx="80" cy="80" r="64" fill="none" stroke="#10b981" stroke-width="12" stroke-dasharray="402" stroke-dashoffset="402" stroke-linecap="round" />
+                        </svg>
+                        <div class="text-center z-10">
+                            <p class="text-xs text-orange-400 font-medium">还可以吃</p>
+                            <p class="text-4xl font-bold text-gray-800 my-0.5">1645</p>
+                            <div class="flex items-center justify-center text-[10px] text-gray-400 mt-1">
+                                推荐预算 1645 <i data-lucide="info" class="ml-0.5 w-2.5 h-2.5 opacity-60"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-center w-20">
+                        <p class="text-xs text-gray-400 mb-1">运动消耗</p>
+                        <p class="text-2xl font-bold text-gray-800">0</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-6 border-t border-gray-50 pt-5 text-center">
+                    <div>
+                        <p class="text-[13px] font-bold text-gray-700 mb-2">碳水化合物</p>
+                        <div class="w-full h-1.5 bg-gray-100 rounded-full mb-1.5"><div class="h-full bg-orange-200 w-0 rounded-full"></div></div>
+                        <p class="text-[10px] text-gray-400">0 / 226克</p>
+                    </div>
+                    <div>
+                        <p class="text-[13px] font-bold text-gray-700 mb-2">蛋白质</p>
+                        <div class="w-full h-1.5 bg-gray-100 rounded-full mb-1.5"><div class="h-full bg-blue-200 w-0 rounded-full"></div></div>
+                        <p class="text-[10px] text-gray-400">0 / 82克</p>
+                    </div>
+                    <div>
+                        <p class="text-[13px] font-bold text-gray-700 mb-2">脂肪</p>
+                        <div class="w-full h-1.5 bg-gray-100 rounded-full mb-1.5"><div class="h-full bg-yellow-200 w-0 rounded-full"></div></div>
+                        <p class="text-[10px] text-gray-400">0 / 46克</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div class="flex flex-col items-center justify-center p-8 mt-4 bg-white rounded-3xl border-2 border-dashed border-gray-100">
+                <div class="w-32 h-32 bg-gray-50 rounded-full flex items-center justify-center mb-6">
+                    <img src="https://picsum.photos/120/120?grayscale&blur=2" class="w-24 opacity-30 rounded-full">
+                </div>
+                <p class="text-sm text-center text-gray-400">
+                    记录饮食获取今日 <span class="text-[#64b58f]">营养分析</span> 与 <span class="text-[#64b58f]">饮食建议</span>
+                </p>
+            </div>
+        </main>
+
+        <!-- Floating Action Bar -->
+        <div class="fixed bottom-24 left-1/2 -translate-x-1/2 w-[90%] max-w-sm z-40">
+            <div class="bg-[#b3f0d5]/90 backdrop-blur-md rounded-full px-2 py-2 flex items-center gap-2 shadow-lg">
+                <button class="flex items-center gap-1.5 bg-white rounded-full pl-2 pr-4 py-1.5 shadow-sm active:scale-95 transition-transform">
+                    <div class="bg-gray-800 text-white text-[10px] font-bold px-1 rounded">AI</div>
+                    <span class="text-sm font-bold text-emerald-800">算热量</span>
+                </button>
+                <button class="flex-1 flex items-center justify-center gap-1.5 bg-white/40 rounded-full py-1.5 text-emerald-900 border border-white/20 active:scale-95 transition-transform">
+                    <i data-lucide="edit-3" class="w-4 h-4"></i><span class="text-sm font-medium">文字</span>
+                </button>
+                <button class="flex-1 flex items-center justify-center gap-1.5 bg-white/40 rounded-full py-1.5 text-emerald-900 border border-white/20 active:scale-95 transition-transform">
+                    <i data-lucide="camera" class="w-4 h-4"></i><span class="text-sm font-medium">拍照</span>
+                </button>
+                <button class="p-2 text-emerald-800/60"><i data-lucide="maximize-2" class="w-4 h-4 rotate-45"></i></button>
+            </div>
+        </div>
+
+        <!-- Bottom Nav -->
+        <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-2 flex justify-between items-center z-50">
+            <button class="flex flex-col items-center flex-1"><div class="w-8 h-8 rounded-full border-2 border-gray-800 flex items-center justify-center"><div class="w-4 h-4 rounded-full border border-gray-800"></div></div><span class="text-[10px] text-gray-500 font-medium">+早餐</span></button>
+            <button class="flex flex-col items-center flex-1"><i data-lucide="sandwich" class="text-gray-700 w-6 h-6"></i><span class="text-[10px] text-gray-500 font-medium">+午餐</span></button>
+            <button class="flex flex-col items-center flex-1"><i data-lucide="soup" class="text-gray-700 w-6 h-6"></i><span class="text-[10px] text-gray-500 font-medium">+晚餐</span></button>
+            <button class="flex flex-col items-center flex-1"><i data-lucide="cherry" class="text-gray-700 w-6 h-6"></i><span class="text-[10px] text-gray-500 font-medium">+加餐</span></button>
+            <button class="flex flex-col items-center flex-1"><i data-lucide="footprints" class="text-gray-700 w-6 h-6"></i><span class="text-[10px] text-gray-500 font-medium">+运动</span></button>
+        </nav>
+
+        <!-- Calendar Dropdown Overlay -->
+        <div id="calendar-overlay" class="calendar-overlay">
+            <div id="calendar-backdrop" class="absolute inset-0 bg-black/10 backdrop-blur-[2px] animate-fade-in"></div>
+            <div id="calendar-content" class="absolute top-0 left-0 w-full bg-white rounded-b-[40px] shadow-2xl px-6 pt-4 pb-8 overflow-hidden animate-slide-down">
+                <div class="flex flex-col">
+                    <div class="h-10 mb-4 flex items-end justify-between">
+                        <h2 id="calendar-title" class="text-xl font-bold text-gray-800">2026年1月</h2>
+                        <div class="flex gap-2">
+                            <button id="prev-month" class="p-1.5 text-gray-400 bg-gray-50 rounded-full active:scale-90"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                            <button id="next-month" class="p-1.5 text-gray-400 bg-gray-50 rounded-full active:scale-90"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-7 mb-4">
+                        <div class="text-center text-xs text-gray-400 py-2">日</div><div class="text-center text-xs text-gray-400 py-2">一</div><div class="text-center text-xs text-gray-400 py-2">二</div><div class="text-center text-xs text-gray-400 py-2">三</div><div class="text-center text-xs text-gray-400 py-2">四</div><div class="text-center text-xs text-gray-400 py-2">五</div><div class="text-center text-xs text-gray-400 py-2">六</div>
+                    </div>
+                    <div id="calendar-grid" class="grid grid-cols-7 gap-y-6 mb-10 min-h-[280px]">
+                        <!-- Calendar days injected by JS -->
+                    </div>
+                    <div class="flex items-center justify-between mt-auto">
+                        <div class="flex gap-4 items-center">
+                            <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-red-400"></div><span class="text-[11px] text-gray-500">吃多了</span></div>
+                            <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-emerald-400"></div><span class="text-[11px] text-gray-500">合适</span></div>
+                            <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-yellow-400"></div><span class="text-[11px] text-gray-500">吃少了</span></div>
+                        </div>
+                        <button id="back-to-today" class="bg-orange-50 text-orange-400 text-xs px-5 py-2.5 rounded-full font-bold active:scale-95 shadow-sm">回今天</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // State
+        let isCalendarOpen = false;
+        let viewDate = new Date(2026, 0, 1);
+        const todayDate = new Date(2026, 0, 19);
+
+        // Elements
+        const todayBtn = document.getElementById('today-btn');
+        const todayChevron = document.getElementById('today-chevron');
+        const calendarOverlay = document.getElementById('calendar-overlay');
+        const calendarBackdrop = document.getElementById('calendar-backdrop');
+        const calendarGrid = document.getElementById('calendar-grid');
+        const calendarTitle = document.getElementById('calendar-title');
+        const weekStrip = document.getElementById('week-strip');
+
+        // --- Week Strip Rendering ---
+        function renderWeekStrip() {
+            const start = new Date(2026, 0, 1);
+            let html = '<div class="flex gap-0 min-w-max px-[calc(50%-30px)]">';
+            for (let i = 0; i < 31; i++) {
+                const d = new Date(start);
+                d.setDate(start.getDate() + i);
+                const isActive = d.toDateString() === todayDate.toDateString();
+                const dayName = ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+                html += `
+                    <div class="flex flex-col items-center w-[14.28vw] max-w-[60px] week-day-item flex-shrink-0" ${isActive ? 'id="active-week-day"' : ''}>
+                        <span class="text-[11px] text-gray-400 mb-2 font-medium">${dayName}</span>
+                        <div class="w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-200 ${isActive ? 'bg-[#b3f0d5] text-emerald-900 font-bold' : 'text-gray-700 font-medium'}">
+                            <span class="text-sm">${d.getDate()}</span>
+                        </div>
+                    </div>
+                `;
+            }
+            html += '</div>';
+            weekStrip.innerHTML = html;
+            
+            // Scroll to active day
+            setTimeout(() => {
+                document.getElementById('active-week-day')?.scrollIntoView({ inline: 'center', behavior: 'auto' });
+            }, 100);
+        }
+
+        // --- Calendar Logic ---
+        function renderCalendar() {
+            const year = viewDate.getFullYear();
+            const month = viewDate.getMonth();
+            calendarTitle.innerText = `${year}年${month + 1}月`;
+            
+            const firstDay = new Date(year, month, 1).getDay();
+            const lastDate = new Date(year, month + 1, 0).getDate();
+            const prevMonthLastDate = new Date(year, month, 0).getDate();
+
+            let daysHtml = '';
+            
+            // Prev month padding
+            for (let i = firstDay - 1; i >= 0; i--) {
+                daysHtml += createDayHtml(prevMonthLastDate - i, false);
+            }
+            // Current month
+            for (let i = 1; i <= lastDate; i++) {
+                const isToday = year === todayDate.getFullYear() && month === todayDate.getMonth() && i === todayDate.getDate();
+                // Mock progress data
+                let progress = 0;
+                if (i >= 5 && i <= 17) progress = 1.0;
+                if (i === 18) progress = 0.35;
+                
+                daysHtml += createDayHtml(i, true, isToday, progress);
+            }
+            // Next month padding
+            const totalInGrid = 42;
+            const remaining = totalInGrid - (firstDay + lastDate);
+            for (let i = 1; i <= remaining; i++) {
+                daysHtml += createDayHtml(i, false);
+            }
+
+            calendarGrid.innerHTML = daysHtml;
+        }
+
+        function createDayHtml(date, isCurrentMonth, isToday = false, progress = 0) {
+            const circleRadius = 16;
+            const circumference = 2 * Math.PI * circleRadius;
+            const offset = circumference - (progress * circumference);
+            
+            const textColor = !isCurrentMonth ? 'text-gray-200' : isToday ? 'text-white' : 'text-gray-700';
+            const statusDot = (progress > 0 && !isToday) ? '<div class="absolute -bottom-1.5 w-1 h-1 bg-yellow-400 rounded-full"></div>' : '';
+            const orangeCircle = isToday ? '<div class="absolute w-[26px] h-[26px] bg-orange-400 rounded-full shadow-sm z-0"></div>' : '';
+
+            return `
+                <div class="flex flex-col items-center justify-center relative">
+                    <div class="relative w-9 h-9 flex items-center justify-center z-10 cursor-pointer">
+                        <svg class="absolute inset-0 w-9 h-9 -rotate-90" viewBox="0 0 40 40">
+                            <circle cx="20" cy="20" r="${circleRadius}" fill="none" stroke="${isToday ? 'rgba(0,0,0,0.05)' : '#f1f5f9'}" stroke-width="2.5" />
+                            ${progress > 0 ? `<circle cx="20" cy="20" r="${circleRadius}" fill="none" stroke="#10b981" stroke-width="2.5" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}" stroke-linecap="round" />` : ''}
+                        </svg>
+                        ${orangeCircle}
+                        <span class="text-sm font-bold z-10 ${textColor}">${date}</span>
+                        ${statusDot}
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Event Handlers ---
+        function toggleCalendar() {
+            isCalendarOpen = !isCalendarOpen;
+            if (isCalendarOpen) {
+                calendarOverlay.classList.add('active');
+                todayChevron.setAttribute('data-lucide', 'chevron-up');
+            } else {
+                calendarOverlay.classList.remove('active');
+                todayChevron.setAttribute('data-lucide', 'chevron-down');
+            }
+            lucide.createIcons();
+        }
+
+        todayBtn.addEventListener('click', toggleCalendar);
+        calendarBackdrop.addEventListener('click', toggleCalendar);
+        
+        document.getElementById('prev-month').addEventListener('click', (e) => {
+            e.stopPropagation();
+            viewDate.setMonth(viewDate.getMonth() - 1);
+            renderCalendar();
+        });
+        
+        document.getElementById('next-month').addEventListener('click', (e) => {
+            e.stopPropagation();
+            viewDate.setMonth(viewDate.getMonth() + 1);
+            renderCalendar();
+        });
+
+        document.getElementById('back-to-today').addEventListener('click', () => {
+            viewDate = new Date(2026, 0, 1);
+            renderCalendar();
+        });
+
+        // Swipe Detection for Calendar
+        let touchStartX = 0;
+        document.getElementById('calendar-content').addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+        });
+        document.getElementById('calendar-content').addEventListener('touchend', (e) => {
+            const touchEndX = e.changedTouches[0].clientX;
+            const diff = touchStartX - touchEndX;
+            if (Math.abs(diff) > 50) {
+                if (diff > 0) viewDate.setMonth(viewDate.getMonth() + 1);
+                else viewDate.setMonth(viewDate.getMonth() - 1);
+                renderCalendar();
+            }
+        });
+
+        // Init
+        renderWeekStrip();
+        renderCalendar();
+    </script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>

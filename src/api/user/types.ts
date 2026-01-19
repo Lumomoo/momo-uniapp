@@ -31,6 +31,25 @@ export interface LoginResult {
   openid?: string;
 }
 
+export interface UserInfo {
+  userId?: number;
+  userName?: string;
+  nickName?: string;
+  avatar?: string | null;
+}
+
+export interface UserProfiles {
+  nickname?: string;
+  avatarUrl?: string;
+}
+
+export interface UserProfileResult {
+  user?: UserInfo;
+  roleGroup?: string;
+  postGroup?: string;
+  userProfiles?: UserProfiles;
+}
+
 export interface RegisterParams {
   clientId: string;
   loginType?: string;

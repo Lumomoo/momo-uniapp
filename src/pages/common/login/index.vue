@@ -9,7 +9,7 @@
 
     <view class="login">
       <view class="login__bg login__bg--top">
-        <image class="bg" src="https://resource.tuniaokj.com/images/login/2/login-top2.png" mode="widthFix" />
+        <image class="bg" src="@/static/images/tuniao/login-top2.png" mode="widthFix" />
       </view>
 
       <view class="login__wrapper">
@@ -97,7 +97,7 @@
       </view>
 
       <view class="login__bg login__bg--bottom">
-        <image src="https://resource.tuniaokj.com/images/login/2/login-bottom2.png" mode="widthFix" />
+        <image src="@/static/images/tuniao/login-bottom2.png" mode="widthFix" />
       </view>
     </view>
   </view>
