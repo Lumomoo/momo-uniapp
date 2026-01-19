@@ -40,6 +40,12 @@
           }
         },
         {
+          "path": "active-log/index",
+          "style": {
+            "navigationStyle": "custom"
+          }
+        },
+        {
           "path": "search/index",
           "style": {
             "navigationBarTitleText": "搜索",

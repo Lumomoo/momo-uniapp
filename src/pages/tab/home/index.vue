@@ -56,14 +56,10 @@
         </view>
       </view>
 
-      <view class="card">
+      <view class="card" @tap="goToActiveLog">
         <view class="card-header">
           <view class="card-title">
             <text class="title-text">饮食热量</text>
-          </view>
-          <view class="diet-badge">
-            <view class="diet-dot">GLP</view>
-            <text class="diet-text">GLP饮食</text>
           </view>
         </view>
         <view class="diet-summary">
@@ -308,6 +304,13 @@ function toggleWeightVisible() {
  */
 function goToSearch() {
   uni.navigateTo({ url: '/pages/common/search/index' });
+}
+
+/**
+ * 跳转饮食记录页
+ */
+function goToActiveLog() {
+  uni.navigateTo({ url: '/pages/common/active-log/index' });
 }
 </script>
 
