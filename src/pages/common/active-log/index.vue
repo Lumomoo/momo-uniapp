@@ -29,10 +29,11 @@
           :id="day.id"
           :key="day.id"
           class="week-day"
-          :class="{ 'is-today': day.isToday }"
+          :class="{ 'is-today': day.isToday, 'is-active': day.isActive }"
+          @tap="handleWeekDaySelect(day)"
         >
           <text class="week-day-name">{{ day.weekLabel }}</text>
-          <view class="week-day-number" :class="{ active: day.isToday }">
+          <view class="week-day-number" :class="{ active: day.isActive }">
             {{ day.date }}
           </view>
         </view>
@@ -64,7 +65,7 @@
                 <text class="energy-info-label">还可以吃</text>
                 <text class="energy-info-value">{{ remainingBudgetText }}</text>
                 <view class="energy-info-tip">
-                  推荐预算 {{ recommendedBudgetText }} <text class="tn-icon-help icon-small" />
+                  推荐预算 {{ recommendedBudgetText }} <text class="tn-icon-help icon-small" @tap="showBmrTip" />
                 </view>
               </view>
             </view>
@@ -81,33 +82,53 @@
               <view class="macro-bar">
                 <view class="macro-bar-fill orange" />
               </view>
-              <text class="macro-sub">0 / 226克</text>
+              <text class="macro-sub">{{ macroCarbohydrateText }}</text>
             </view>
             <view class="macro-item">
               <text class="macro-title">蛋白质</text>
               <view class="macro-bar">
                 <view class="macro-bar-fill blue" />
               </view>
-              <text class="macro-sub">0 / 82克</text>
+              <text class="macro-sub">{{ macroProteinText }}</text>
             </view>
             <view class="macro-item">
               <text class="macro-title">脂肪</text>
               <view class="macro-bar">
                 <view class="macro-bar-fill yellow" />
               </view>
-              <text class="macro-sub">0 / 46克</text>
+              <text class="macro-sub">{{ macroFatText }}</text>
             </view>
+          </view>
+
+          <view class="macro-foot">
+            <text class="macro-sub">膳食纤维：{{ macroFiberText }}</text>
           </view>
         </view>
       </view>
 
-      <view class="empty-card">
+      <view v-if="!activeLogs.length" class="empty-card">
         <view class="empty-avatar">
           <image src="@/static/images/logo.png" mode="aspectFill" class="empty-img" />
         </view>
         <text class="empty-text">
           记录饮食获取今日 <text class="highlight">营养分析</text> 与 <text class="highlight">饮食建议</text>
         </text>
+      </view>
+
+      <view v-else class="log-section">
+        <view v-for="group in groupedLogCards" :key="group.key" class="log-card">
+          <view class="log-card-title">{{ group.title }}</view>
+          <view v-for="item in group.items" :key="item.id" class="log-item">
+            <view class="log-item-left">
+              <text class="log-item-name">{{ item.name }}</text>
+              <text class="log-item-sub">{{ item.subText }}</text>
+            </view>
+            <view class="log-item-right">
+              <text class="log-item-calories">{{ item.caloriesText }}</text>
+              <text class="tn-icon-edit log-item-edit" @tap.stop="handleEditLog(item.raw)" />
+            </view>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -177,7 +198,8 @@
             v-for="day in calendarDays"
             :key="day.key"
             class="calendar-day"
-            :class="{ inactive: !day.isCurrent, today: day.isToday }"
+            :class="{ inactive: !day.isCurrent, today: day.isToday, active: day.isActive }"
+            @tap="handleCalendarSelect(day)"
           >
             <text>{{ day.date }}</text>
           </view>
@@ -201,36 +223,95 @@
         </view>
       </view>
     </view>
+    <view v-if="bmrTipMounted" class="bmr-tip-overlay" @tap="closeBmrTip">
+      <view class="bmr-tip-panel" :class="{ 'is-active': bmrTipVisible }" @tap.stop>
+        <view class="bmr-tip-title">推荐预算说明</view>
+        <view class="bmr-tip-content">
+          <text>BMR = （9.99 x 体重 + 6.25 x 身高 – 4.92 x 年龄 + s ） 千卡/天</text>
+          <text>在这里，体重以公斤为单位，身高以厘米为单位，年龄以年为单位。</text>
+          <text>s 是调整性别的因素，男性采用值 +5，女性采用 -161 值。</text>
+        </view>
+      </view>
+    </view>
+
+    <ActiveLogModal
+      v-model:visible="activeLogModalVisible"
+      :active-type="activeLogConfig.activeType"
+      :meal-type="activeLogConfig.mealType"
+      :show-snack-picker="activeLogConfig.showSnackPicker"
+      :title="activeLogConfig.title"
+      :record="editingLog"
+      @save="handleActiveLogSave"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
-import type { HealthUserProfiles } from '@/api/health/types';
+import type { ActiveLogCreatePayload, HealthActiveLogSummary, HealthUserProfiles, UserActiveLog, UserHealthStats } from '@/api/health/types';
 import { HealthApi } from '@/api';
 import { useUserStore } from '@/store';
+import ActiveLogModal from '@/components/active-log-modal/index.vue';
 
 const userStore = useUserStore();
 const healthProfile = ref<HealthUserProfiles | null>(null);
 const calendarVisible = ref(false);
 const viewDate = ref(new Date());
 const todayDate = ref(new Date());
+const selectedDate = ref(new Date());
 const weekNames = ['日', '一', '二', '三', '四', '五', '六'];
 const nutritionExpanded = ref(true);
 const defaultUserId = '1';
-const dietIntake = ref(50);
+const activeLogs = ref<UserActiveLog[]>([]);
+const dietIntake = ref(0);
 const exerciseConsume = ref(0);
 const ringRadius = 42;
 const ringCircumference = 2 * Math.PI * ringRadius;
 const weekStripScrollLeft = ref(0);
+const bmrTipVisible = ref(false);
+const bmrTipMounted = ref(false);
+const bmrTipTransitionMs = 600;
+const bmrTipOpenDelayMs = 40;
+const bmrTipCloseTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+const bmrTipOpenTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+const activeLogModalVisible = ref(false);
+const editingLog = ref<UserActiveLog | null>(null);
+const activeLogConfig = ref({
+  activeType: 1,
+  mealType: 1,
+  showSnackPicker: false,
+  title: '',
+});
 
 /**
- * 页面显示时拉取用户健康档案
+ * 页面显示时拉取用户活动汇总
  */
 onShow(async () => {
-  await fetchHealthProfile();
+  todayDate.value = new Date();
+  if (!selectedDate.value)
+    selectedDate.value = new Date(todayDate.value);
+  await fetchActiveSummary(formatQueryDate(selectedDate.value));
   await nextTick();
-  centerTodayInWeekStrip();
+  centerActiveInWeekStrip();
 });
+
+/**
+ * 拉取用户活动汇总
+ */
+async function fetchActiveSummary(date: string) {
+  const userId = userStore.user_id || defaultUserId;
+  const summary = await HealthApi.getActiveLogSummary(userId, date).catch(() => {
+    uni.$u.toast('获取活动记录失败');
+    return null;
+  });
+  if (!summary) {
+    await fetchHealthProfile();
+    dietIntake.value = 0;
+    exerciseConsume.value = 0;
+    activeLogs.value = [];
+    return;
+  }
+  applyActiveSummary(summary);
+}
 
 /**
  * 拉取用户健康档案
@@ -242,6 +323,18 @@ async function fetchHealthProfile() {
     return null;
   });
   healthProfile.value = profile;
+}
+
+/**
+ * 应用活动汇总数据
+ */
+function applyActiveSummary(summary: HealthActiveLogSummary) {
+  const profile = summary.userProfiles ?? healthProfile.value;
+  healthProfile.value = mergeHealthStats(profile, summary.userHealthStats);
+  activeLogs.value = summary.userActiveLogs || [];
+  const calories = calcCaloriesByActiveLogs(activeLogs.value);
+  dietIntake.value = calories.diet;
+  exerciseConsume.value = calories.exercise;
 }
 
 /**
@@ -263,18 +356,20 @@ function toggleNutritionCard() {
  */
 function toggleCalendar() {
   calendarVisible.value = !calendarVisible.value;
+  if (calendarVisible.value)
+    viewDate.value = new Date(selectedDate.value);
 }
 
 /**
  * 滚动周视图让今天居中
  */
-function centerTodayInWeekStrip() {
+function centerActiveInWeekStrip() {
   const instance = getCurrentInstance();
   if (!instance)
     return;
   const query = uni.createSelectorQuery().in(instance.proxy);
   query.select('.week-strip').boundingClientRect();
-  query.select('.week-day.is-today').boundingClientRect();
+  query.select('.week-day.is-active').boundingClientRect();
   query.exec((res) => {
     const stripRect = res?.[0];
     const todayRect = res?.[1];
@@ -285,6 +380,60 @@ function centerTodayInWeekStrip() {
   });
 }
 
+/**
+ * 计算饮食与运动热量
+ */
+function calcCaloriesByActiveLogs(logs: UserActiveLog[]) {
+  let diet = 0;
+  let exercise = 0;
+  logs.forEach((item) => {
+    const total = Number(item.totalCalories);
+    if (!Number.isFinite(total))
+      return;
+    if (item.activeType === 2)
+      exercise += total;
+    else
+      diet += total;
+  });
+  return {
+    diet: Math.round(diet),
+    exercise: Math.round(exercise),
+  };
+}
+
+/**
+ * 判断是否加餐类型
+ */
+function isSnackMealType(mealType?: number) {
+  return mealType === 2 || mealType === 4 || mealType === 6;
+}
+
+/**
+ * 合并健康体征信息
+ */
+function mergeHealthStats(profile: HealthUserProfiles | null | undefined, stats?: UserHealthStats) {
+  if (!profile)
+    return profile ?? null;
+  if (!stats)
+    return profile;
+  return {
+    ...profile,
+    userHealthStats: {
+      ...(profile.userHealthStats || {}),
+      ...stats,
+    },
+  };
+}
+
+/**
+ * 格式化查询日期
+ */
+function formatQueryDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 /**
  * 切换到上一月
  */
@@ -307,7 +456,10 @@ function nextMonth() {
  * 回到当前日期
  */
 function backToToday() {
-  viewDate.value = new Date(todayDate.value);
+  const today = new Date(todayDate.value);
+  viewDate.value = new Date(today);
+  applySelectedDate(today);
+  calendarVisible.value = false;
 }
 
 /**
@@ -322,19 +474,22 @@ const calendarTitle = computed(() => {
  * 生成周滑条数据
  */
 const weekStripDays = computed(() => {
-  const date = new Date(todayDate.value);
+  const date = new Date(selectedDate.value);
   const year = date.getFullYear();
   const month = date.getMonth();
   const total = new Date(year, month + 1, 0).getDate();
-  const list = [] as Array<{ id: string; date: number; weekLabel: string; isToday: boolean }>;
+  const list = [] as Array<{ id: string; date: number; weekLabel: string; isToday: boolean; isActive: boolean; dateObj: Date }>;
   for (let i = 1; i <= total; i += 1) {
     const itemDate = new Date(year, month, i);
-    const isToday = itemDate.toDateString() === date.toDateString();
+    const isToday = isSameDate(itemDate, todayDate.value);
+    const isActive = isSameDate(itemDate, selectedDate.value);
     list.push({
       id: `day-${year}-${month}-${i}`,
       date: i,
       weekLabel: weekNames[itemDate.getDay()],
       isToday,
+      isActive,
+      dateObj: itemDate,
     });
   }
   return list;
@@ -344,8 +499,8 @@ const weekStripDays = computed(() => {
  * 获取当前激活日期 id
  */
 const activeDayId = computed(() => {
-  const today = weekStripDays.value.find(item => item.isToday);
-  return today ? today.id : '';
+  const active = weekStripDays.value.find(item => item.isActive);
+  return active ? active.id : '';
 });
 
 /**
@@ -355,39 +510,21 @@ const calendarDays = computed(() => {
   const date = viewDate.value;
   const year = date.getFullYear();
   const month = date.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const lastDate = new Date(year, month + 1, 0).getDate();
-  const prevMonthLastDate = new Date(year, month, 0).getDate();
-  const list: Array<{ key: string; date: number; isCurrent: boolean; isToday: boolean }> = [];
-
-  for (let i = firstDay - 1; i >= 0; i -= 1) {
+  const list: Array<{ key: string; date: number; isCurrent: boolean; isToday: boolean; isActive: boolean; dateObj: Date }> = [];
+  const startOfMonth = new Date(year, month, 1);
+  const startOffset = startOfMonth.getDay();
+  for (let i = 0; i < 42; i += 1) {
+    const cellDate = new Date(year, month, 1 - startOffset + i);
+    const isCurrent = cellDate.getMonth() === month;
+    const isToday = isSameDate(cellDate, todayDate.value);
+    const isActive = isSameDate(cellDate, selectedDate.value);
     list.push({
-      key: `prev-${i}`,
-      date: prevMonthLastDate - i,
-      isCurrent: false,
-      isToday: false,
-    });
-  }
-
-  for (let i = 1; i <= lastDate; i += 1) {
-    const current = new Date(year, month, i);
-    const isToday = current.toDateString() === todayDate.value.toDateString();
-    list.push({
-      key: `current-${i}`,
-      date: i,
-      isCurrent: true,
+      key: formatDateKey(cellDate),
+      date: cellDate.getDate(),
+      isCurrent,
       isToday,
-    });
-  }
-
-  const totalCells = 42;
-  const remaining = totalCells - list.length;
-  for (let i = 1; i <= remaining; i += 1) {
-    list.push({
-      key: `next-${i}`,
-      date: i,
-      isCurrent: false,
-      isToday: false,
+      isActive,
+      dateObj: cellDate,
     });
   }
   return list;
@@ -413,14 +550,16 @@ const nutritionIconClass = computed(() => {
 const recommendedBudget = computed(() => {
   const stats = healthProfile.value?.userHealthStats;
   const birthday = healthProfile.value?.birthday;
-  if (!stats?.weight || !stats?.height || !birthday)
+  const weight = Number(stats?.weight);
+  const height = Number(stats?.height);
+  if (!Number.isFinite(weight) || !Number.isFinite(height) || !birthday)
     return null;
   const age = getAgeByBirthday(birthday);
   if (age === null)
     return null;
   const gender = healthProfile.value?.gender;
   const genderOffset = getGenderOffset(gender);
-  const value = 9.99 * stats.weight + 6.25 * stats.height - 4.92 * age + genderOffset;
+  const value = 9.99 * weight + 6.25 * height - 4.92 * age + genderOffset;
   return Math.round(value);
 });
 
@@ -444,6 +583,55 @@ const dietIntakeText = computed(() => {
  */
 const exerciseConsumeText = computed(() => {
   return String(exerciseConsume.value);
+});
+
+/**
+ * 统计营养素总量
+ */
+function calcNutrientTotals(logs: UserActiveLog[]) {
+  return logs
+    .filter(item => item.activeType === 1)
+    .reduce((acc, item) => {
+      acc.protein += Number(item.protein) || 0;
+      acc.fat += Number(item.fat) || 0;
+      acc.carbohydrate += Number(item.carbohydrate) || 0;
+      acc.fiber += Number(item.fiber) || 0;
+      return acc;
+    }, {
+      protein: 0,
+      fat: 0,
+      carbohydrate: 0,
+      fiber: 0,
+    });
+}
+
+/**
+ * 格式化营养素显示
+ */
+function formatMacroValue(value: number) {
+  if (!Number.isFinite(value))
+    return '--';
+  return `${value.toFixed(1)} 克`;
+}
+
+const nutrientTotals = computed(() => {
+  return calcNutrientTotals(activeLogs.value);
+});
+
+const macroProteinText = computed(() => {
+  return formatMacroValue(nutrientTotals.value.protein);
+});
+
+const macroFatText = computed(() => {
+  return formatMacroValue(nutrientTotals.value.fat);
+});
+
+const macroCarbohydrateText = computed(() => {
+  return formatMacroValue(nutrientTotals.value.carbohydrate);
+});
+
+const macroFiberText = computed(() => {
+  return formatMacroValue(nutrientTotals.value.fiber);
 });
 
 /**
@@ -504,6 +692,176 @@ const remainingBudgetText = computed(() => {
 });
 
 /**
+ * 获取餐次名称
+ */
+function getMealTypeLabel(mealType?: number) {
+  const map: Record<number, string> = {
+    1: '早餐',
+    2: '早加餐',
+    3: '午餐',
+    4: '午加餐',
+    5: '晚餐',
+    6: '晚加餐',
+  };
+  if (!mealType)
+    return '未分组';
+  return map[mealType] || '未分组';
+}
+
+/**
+ * 获取活动类型名称
+ */
+function getActiveTypeLabel(activeType?: number) {
+  if (activeType === 1)
+    return '饮食';
+  if (activeType === 2)
+    return '运动';
+  return '未知';
+}
+
+/**
+ * 格式化热量
+ */
+function formatCalories(value?: number | string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed))
+    return '--';
+  return `${parsed.toFixed(2)} kcal`;
+}
+
+/**
+ * 格式化分量
+ */
+function formatFoodAmount(value?: number | string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed))
+    return '--';
+  return `${parsed} g`;
+}
+
+/**
+ * 格式化运动时长
+ */
+function formatExerciseDuration(value?: number | string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed))
+    return '--';
+  return `${parsed} 分钟`;
+}
+
+/**
+ * 活动记录分组卡片
+ */
+const groupedLogCards = computed(() => {
+  const groups = new Map<string, { activeType: number; mealType: number; items: UserActiveLog[] }>();
+  activeLogs.value.forEach((item) => {
+    const activeType = Number(item.activeType ?? 0);
+    const mealType = Number(item.mealType ?? 0);
+    const key = `${activeType}-${mealType}`;
+    if (!groups.has(key))
+      groups.set(key, { activeType, mealType, items: [] });
+    groups.get(key)?.items.push(item);
+  });
+  return [...groups.values()]
+    .sort((a, b) => (a.activeType - b.activeType) || (a.mealType - b.mealType))
+    .map((group) => {
+      const title = group.activeType === 1
+        ? getMealTypeLabel(group.mealType)
+        : '运动';
+      return {
+        key: `${group.activeType}-${group.mealType}`,
+        title,
+        items: group.items.map(item => ({
+          id: item.id ?? `${group.activeType}-${group.mealType}-${item.foodId ?? item.exerciseId ?? ''}`,
+          name: group.activeType === 1
+            ? (item.foodName || (item.foodId ? `食物${item.foodId}` : '未知食物'))
+            : '运动记录',
+          subText: group.activeType === 1
+            ? formatFoodAmount(item.foodAmount)
+            : formatExerciseDuration(item.exerciseAmount),
+          caloriesText: formatCalories(item.totalCalories),
+          raw: item,
+        })),
+      };
+    });
+});
+
+/**
+ * 打开编辑弹窗
+ */
+function handleEditLog(record: UserActiveLog) {
+  const activeType = Number(record.activeType ?? 1);
+  const mealType = Number(record.mealType ?? 1);
+  activeLogConfig.value = {
+    activeType,
+    mealType,
+    showSnackPicker: activeType === 1 && isSnackMealType(mealType),
+    title: activeType === 1 ? '编辑饮食' : '编辑运动',
+  };
+  editingLog.value = record;
+  activeLogModalVisible.value = true;
+}
+
+/**
+ * 保存编辑活动记录
+ */
+async function handleActiveLogSave(payload: ActiveLogCreatePayload) {
+  const isEdit = Boolean(editingLog.value);
+  const requestPayload: ActiveLogCreatePayload = { ...payload };
+  if (editingLog.value?.id)
+    requestPayload.id = editingLog.value.id;
+  try {
+    if (isEdit)
+      await HealthApi.updateActiveLog(requestPayload);
+    else
+      await HealthApi.createActiveLog(requestPayload);
+    uni.$u.toast(isEdit ? '更新成功' : '新增成功');
+    await fetchActiveSummary(formatQueryDate(selectedDate.value));
+  }
+  catch {
+    uni.$u.toast(isEdit ? '更新失败' : '新增失败');
+  }
+}
+
+/**
+ * 显示基础代谢公式提示
+ */
+function showBmrTip() {
+  if (bmrTipCloseTimer.value) {
+    clearTimeout(bmrTipCloseTimer.value);
+    bmrTipCloseTimer.value = null;
+  }
+  if (bmrTipOpenTimer.value) {
+    clearTimeout(bmrTipOpenTimer.value);
+    bmrTipOpenTimer.value = null;
+  }
+  bmrTipMounted.value = true;
+  nextTick(() => {
+    bmrTipOpenTimer.value = setTimeout(() => {
+      bmrTipVisible.value = true;
+      bmrTipOpenTimer.value = null;
+    }, bmrTipOpenDelayMs);
+  });
+}
+
+/**
+ * 关闭基础代谢公式提示
+ */
+function closeBmrTip() {
+  bmrTipVisible.value = false;
+  if (bmrTipOpenTimer.value) {
+    clearTimeout(bmrTipOpenTimer.value);
+    bmrTipOpenTimer.value = null;
+  }
+  if (bmrTipCloseTimer.value)
+    clearTimeout(bmrTipCloseTimer.value);
+  bmrTipCloseTimer.value = setTimeout(() => {
+    bmrTipMounted.value = false;
+    bmrTipCloseTimer.value = null;
+  }, bmrTipTransitionMs);
+}
+
+/**
  * 解析生日并计算年龄
  */
 function getAgeByBirthday(value: string) {
@@ -524,9 +882,7 @@ function getAgeByBirthday(value: string) {
 function getGenderOffset(gender?: number) {
   if (gender === 1)
     return 5;
-  if (gender === 2)
-    return -161;
-  return 0;
+  return -161;
 }
 
 /**
@@ -539,6 +895,57 @@ function parseDate(value: string) {
     return null;
   return date;
 }
+
+/**
+ * 判断是否同一天
+ */
+function isSameDate(left: Date, right: Date) {
+  return left.getFullYear() === right.getFullYear()
+    && left.getMonth() === right.getMonth()
+    && left.getDate() === right.getDate();
+}
+
+/**
+ * 格式化日期key
+ */
+function formatDateKey(date: Date) {
+  return formatQueryDate(date);
+}
+
+/**
+ * 切换选择日期
+ */
+function applySelectedDate(date: Date) {
+  selectedDate.value = new Date(date);
+  viewDate.value = new Date(date);
+  fetchActiveSummary(formatQueryDate(selectedDate.value));
+  nextTick(() => {
+    centerActiveInWeekStrip();
+  });
+}
+
+/**
+ * 点击周视图日期
+ */
+function handleWeekDaySelect(day: { dateObj: Date }) {
+  applySelectedDate(day.dateObj);
+}
+
+/**
+ * 点击日历日期
+ */
+function handleCalendarSelect(day: { dateObj: Date }) {
+  applySelectedDate(day.dateObj);
+  calendarVisible.value = false;
+}
+
+/**
+ * 弹窗关闭后清理编辑态
+ */
+watch(activeLogModalVisible, (value) => {
+  if (!value)
+    editingLog.value = null;
+});
 </script>
 
 <style lang="scss" scoped>
@@ -828,6 +1235,11 @@ function parseDate(value: string) {
   color: #9ca3af;
 }
 
+.macro-foot {
+  margin-top: 20rpx;
+  text-align: center;
+}
+
 .empty-card {
   background: #ffffff;
   border-radius: 32rpx;
@@ -862,6 +1274,71 @@ function parseDate(value: string) {
 
 .highlight {
   color: #64b58f;
+}
+
+.log-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.log-card {
+  border-radius: 24rpx;
+  padding: 20rpx 24rpx;
+  color: #0f172a;
+  background: #ffffff;
+  box-shadow: 0 12rpx 32rpx rgba(15, 23, 42, 0.06);
+}
+
+.log-card-title {
+  font-size: 22rpx;
+  font-weight: 700;
+  margin-bottom: 10rpx;
+}
+
+.log-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+}
+
+.log-item:last-child {
+  border-bottom: none;
+}
+
+.log-item-name {
+  font-size: 20rpx;
+  color: #111827;
+}
+
+.log-item-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.log-item-sub {
+  font-size: 18rpx;
+  color: #9ca3af;
+}
+
+.log-item-right {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.log-item-calories {
+  font-size: 20rpx;
+  font-weight: 700;
+  color: #111827;
+}
+
+.log-item-edit {
+  font-size: 22rpx;
+  color: #9ca3af;
 }
 
 .float-bar {
@@ -1068,6 +1545,19 @@ function parseDate(value: string) {
   margin: 0 auto;
 }
 
+.calendar-day.active {
+  color: #065f46;
+  background: #b3f0d5;
+  border-radius: 999rpx;
+  width: 56rpx;
+  margin: 0 auto;
+}
+
+.calendar-day.today.active {
+  color: #ffffff;
+  background: #fb923c;
+}
+
 .calendar-footer {
   display: flex;
   align-items: center;
@@ -1112,5 +1602,47 @@ function parseDate(value: string) {
   font-size: 20rpx;
   font-weight: 700;
   border-radius: 999rpx;
+}
+
+.bmr-tip-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 120;
+}
+
+.bmr-tip-panel {
+  width: 560rpx;
+  background: #ffffff;
+  padding: 32rpx;
+  border-radius: 32rpx;
+  transform: translateY(70vh);
+  opacity: 0;
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease;
+}
+
+.bmr-tip-panel.is-active {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.bmr-tip-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 20rpx;
+  text-align: center;
+}
+
+.bmr-tip-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  font-size: 22rpx;
+  color: #4b5563;
+  line-height: 1.6;
 }
 </style>

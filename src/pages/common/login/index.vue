@@ -1,11 +1,11 @@
 <template>
   <view class="template-login">
-    <tn-nav-bar fixed alpha customBack>
-      <view slot="back" class="tn-custom-nav-bar__back" @tap="goBack">
-        <text class="icon tn-icon-left" />
-        <text class="icon tn-icon-home-capsule-fill" />
-      </view>
-    </tn-nav-bar>
+    <!--<tn-nav-bar fixed alpha customBack>-->
+    <!--  <view slot="back" class="tn-custom-nav-bar__back" @tap="goBack">-->
+    <!--    <text class="icon tn-icon-left" />-->
+    <!--    <text class="icon tn-icon-home-capsule-fill" />-->
+    <!--  </view>-->
+    <!--</tn-nav-bar>-->
 
     <view class="login">
       <view class="login__bg login__bg--top">

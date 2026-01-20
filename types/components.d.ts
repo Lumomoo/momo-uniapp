@@ -7,9 +7,11 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    ActiveLogModal: typeof import('./../src/components/active-log-modal/index.vue')['default']
     AgreePrivacy: typeof import('./../src/components/agree-privacy/index.vue')['default']
     PageNav: typeof import('./../src/components/page-nav/page-nav.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    WeightRecordModal: typeof import('./../src/components/weight-record-modal/index.vue')['default']
   }
 }

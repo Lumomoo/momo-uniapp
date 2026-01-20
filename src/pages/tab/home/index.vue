@@ -80,44 +80,44 @@
           </view>
         </view>
         <view class="meal-grid">
-          <view class="meal-item">
+          <view class="meal-item" @tap.stop="handleOpenActiveLog('breakfast')">
             <view class="meal-icon">
               <text class="tn-icon-watercup" />
             </view>
             <text class="meal-text">早餐</text>
           </view>
-          <view class="meal-item">
+          <view class="meal-item" @tap.stop="handleOpenActiveLog('lunch')">
             <view class="meal-icon">
               <text class="tn-icon-food" />
             </view>
             <text class="meal-text">午餐</text>
           </view>
-          <view class="meal-item">
+          <view class="meal-item" @tap.stop="handleOpenActiveLog('dinner')">
             <view class="meal-icon">
               <text class="tn-icon-moon" />
             </view>
             <text class="meal-text">晚餐</text>
           </view>
-          <view class="meal-item">
+          <view class="meal-item" @tap.stop="handleOpenActiveLog('snack')">
             <view class="meal-icon">
               <text class="tn-icon-food" />
             </view>
             <text class="meal-text">加餐</text>
           </view>
-          <view class="meal-item">
+          <view class="meal-item" @tap.stop="handleOpenActiveLog('exercise')">
             <view class="meal-icon">
               <text class="tn-icon-footprint" />
             </view>
             <text class="meal-text">运动</text>
           </view>
         </view>
-        <view class="camera-btn">
-          <text class="tn-icon-camera" />
-          <text class="camera-text">薄荷相机</text>
-        </view>
+        <!--<view class="camera-btn">-->
+        <!--  <text class="tn-icon-camera" />-->
+        <!--  <text class="camera-text">薄荷相机</text>-->
+        <!--</view>-->
       </view>
 
-      <view class="card">
+      <view class="card" @tap="goToHealthStatus">
         <view class="card-header">
           <view>
             <view class="card-title">
@@ -126,11 +126,11 @@
             <view class="card-subtitle">09:56 更新</view>
           </view>
           <view class="record-actions">
-            <view class="record-badge">
-              <text class="tn-icon-safe" />
-              <text class="record-badge-text">智能秤</text>
-            </view>
-            <view class="record-add">
+            <!--<view class="record-badge">-->
+            <!--  <text class="tn-icon-safe" />-->
+            <!--  <text class="record-badge-text">智能秤</text>-->
+            <!--</view>-->
+            <view class="record-add" @tap.stop="handleOpenWeightModal">
               <text class="tn-icon-add" />
             </view>
           </view>
@@ -141,34 +141,79 @@
             <text class="record-unit">公斤</text>
           </view>
           <view class="record-chart">
-            <svg viewBox="0 0 100 40" class="chart-svg">
+            <svg v-if="weightChartPoints" viewBox="0 0 100 40" class="chart-svg">
               <polyline
                 fill="none"
                 stroke="#10b981"
                 stroke-width="3"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                points="0,35 15,30 30,32 45,25 60,20 75,15 90,10 100,8"
+                :points="weightChartPoints"
               />
-              <circle cx="100" cy="8" r="3" fill="#10b981" />
+              <circle
+                v-if="weightChartLastPoint"
+                :cx="weightChartLastPoint.x"
+                :cy="weightChartLastPoint.y"
+                r="3"
+                fill="#10b981"
+              />
             </svg>
+            <text v-else class="chart-empty">暂无记录</text>
           </view>
         </view>
       </view>
     </view>
+
+    <WeightRecordModal
+      v-model:visible="weightModalVisible"
+      :initial-weight="modalInitialWeightKg"
+      :initial-timestamp="modalInitialTimestamp"
+      @save="handleWeightSave"
+    />
+
+    <ActiveLogModal
+      v-model:visible="activeLogModalVisible"
+      :active-type="activeLogConfig.activeType"
+      :meal-type="activeLogConfig.mealType"
+      :show-snack-picker="activeLogConfig.showSnackPicker"
+      :title="activeLogConfig.title"
+      @save="handleActiveLogSave"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
-import type { HealthUserProfiles } from '@/api/health/types';
+import type { ActiveLogCreatePayload, HealthUserProfiles, UserHealthStats } from '@/api/health/types';
 import { HealthApi } from '@/api';
 import { useUserStore } from '@/store';
 import defaultAvatar from '@/static/images/logo.png';
+import WeightRecordModal from '@/components/weight-record-modal/index.vue';
+import ActiveLogModal from '@/components/active-log-modal/index.vue';
+
+interface LocalWeightRecord {
+  id: string;
+  weight: number;
+  timestamp: number;
+}
+
+const LOCAL_WEIGHT_KEY = 'health_status_weight_records';
+const DEFAULT_WEIGHT = 60;
 
 const userStore = useUserStore();
 const healthProfile = ref<HealthUserProfiles | null>(null);
 const weightVisible = ref<boolean>(true);
+const latestWeightStats = ref<UserHealthStats[]>([]);
 const maskText = '***';
+const weightModalVisible = ref(false);
+const modalInitialWeightKg = ref(DEFAULT_WEIGHT);
+const modalInitialTimestamp = ref(Date.now());
+const activeLogModalVisible = ref(false);
+const activeLogConfig = ref({
+  activeType: 1,
+  mealType: 1,
+  showSnackPicker: false,
+  title: '',
+});
 
 const avatarUrl = computed(() => {
   return healthProfile.value?.avatarUrl || userStore.profile?.avatarUrl || userStore.avatar || defaultAvatar;
@@ -183,6 +228,7 @@ onShow(async () => {
       uni.$u.toast('获取个人信息失败');
     });
   await fetchHealthProfile();
+  await fetchLatestWeightStats();
 });
 
 /**
@@ -197,6 +243,22 @@ async function fetchHealthProfile() {
     return null;
   });
   healthProfile.value = profile;
+}
+
+/**
+ * 获取近七天体重趋势
+ */
+async function fetchLatestWeightStats() {
+  const userId = userStore.user_id;
+  if (!userId) {
+    latestWeightStats.value = [];
+    return;
+  }
+  const stats = await HealthApi.getLatest7DaysHealthStats(userId).catch(() => {
+    uni.$u.toast('获取近七天体重记录失败');
+    return [];
+  });
+  latestWeightStats.value = stats || [];
 }
 
 /**
@@ -263,6 +325,28 @@ const progressDasharray = computed(() => {
 });
 
 /**
+ * 体重折线图坐标列表
+ */
+const weightChartPointList = computed(() => {
+  return buildWeightChartPointList(latestWeightStats.value);
+});
+
+/**
+ * 体重折线图坐标字符串
+ */
+const weightChartPoints = computed(() => {
+  return weightChartPointList.value.map((point) => `${point.x},${point.y}`).join(' ');
+});
+
+/**
+ * 体重折线图最后一个点
+ */
+const weightChartLastPoint = computed(() => {
+  const points = weightChartPointList.value;
+  return points.length ? points[points.length - 1] : null;
+});
+
+/**
  * 解析日期字符串
  */
 function parseDateTime(value: string) {
@@ -271,6 +355,63 @@ function parseDateTime(value: string) {
   if (Number.isNaN(date.getTime()))
     return null;
   return date;
+}
+
+/**
+ * 获取记录日期时间戳
+ */
+function getRecordTimestamp(recordDate?: string) {
+  if (!recordDate)
+    return null;
+  const date = parseDateTime(recordDate);
+  if (!date)
+    return null;
+  return date.getTime();
+}
+
+/**
+ * 生成体重折线图坐标
+ */
+function buildWeightChartPointList(stats: UserHealthStats[]) {
+  if (!stats.length)
+    return [];
+  const sortedStats = [...stats].sort((a, b) => {
+    const aTime = getRecordTimestamp(a.recordDate);
+    const bTime = getRecordTimestamp(b.recordDate);
+    if (aTime === null && bTime === null)
+      return 0;
+    if (aTime === null)
+      return 1;
+    if (bTime === null)
+      return -1;
+    return aTime - bTime;
+  });
+  const weights = sortedStats
+    .map((item) => Number(item.weight))
+    .filter((weight) => Number.isFinite(weight));
+  if (!weights.length)
+    return [];
+  const maxWeight = Math.max(...weights);
+  const minWeight = Math.min(...weights);
+  const range = maxWeight - minWeight;
+  const width = 100;
+  const height = 40;
+  const paddingX = 6;
+  const paddingY = 6;
+  const usableWidth = width - paddingX * 2;
+  const usableHeight = height - paddingY * 2;
+  const count = weights.length;
+  const step = count > 1 ? usableWidth / (count - 1) : 0;
+  return weights.map((weight, index) => {
+    const x = paddingX + step * index;
+    const y = range === 0
+      ? height / 2
+      : paddingY + (maxWeight - weight) / range * usableHeight;
+    return {
+      x: Number(x.toFixed(2)),
+      y: Number(y.toFixed(2)),
+    };
+  });
 }
 
 /**
@@ -311,6 +452,149 @@ function goToSearch() {
  */
 function goToActiveLog() {
   uni.navigateTo({ url: '/pages/common/active-log/index' });
+}
+
+/**
+ * 跳转体重记录页
+ */
+function goToHealthStatus() {
+  uni.navigateTo({ url: '/pages/common/health-status/index' });
+}
+
+/**
+ * 打开记录体重弹窗
+ */
+function handleOpenWeightModal() {
+  const latestWeight = healthProfile.value?.userHealthStats?.weight
+    ?? healthProfile.value?.userWeightGoals?.startWeight
+    ?? DEFAULT_WEIGHT;
+  modalInitialWeightKg.value = Number.isFinite(latestWeight) ? latestWeight : DEFAULT_WEIGHT;
+  modalInitialTimestamp.value = Date.now();
+  weightModalVisible.value = true;
+}
+
+/**
+ * 保存体重记录
+ */
+async function handleWeightSave(payload: { weight: number; timestamp: number }) {
+  const recordDate = formatRecordDate(payload.timestamp);
+  await HealthApi.createHealthStats({
+    recordDate,
+    weight: payload.weight,
+  }).catch(() => {
+    uni.$u.toast('保存体重记录失败');
+  });
+  const record: LocalWeightRecord = {
+    id: `${payload.timestamp}`,
+    weight: Number(payload.weight.toFixed(1)),
+    timestamp: payload.timestamp,
+  };
+  const localRecords = loadLocalWeightRecords();
+  const merged = mergeLocalWeightRecords(record, localRecords);
+  saveLocalWeightRecords(merged);
+  if (healthProfile.value?.userHealthStats) {
+    healthProfile.value.userHealthStats.weight = record.weight;
+    healthProfile.value.userHealthStats.recordDate = formatRecordDate(record.timestamp);
+  }
+  latestWeightStats.value = mergeLatestWeightStats(latestWeightStats.value, {
+    weight: record.weight,
+    recordDate,
+  });
+}
+
+/**
+ * 读取本地体重记录
+ */
+function loadLocalWeightRecords() {
+  const raw = uni.getStorageSync(LOCAL_WEIGHT_KEY);
+  if (!raw)
+    return [] as LocalWeightRecord[];
+  let data: unknown;
+  try {
+    data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  }
+  catch {
+    return [] as LocalWeightRecord[];
+  }
+  if (!Array.isArray(data))
+    return [] as LocalWeightRecord[];
+  return data
+    .map((item: LocalWeightRecord) => ({
+      id: String(item.id ?? ''),
+      weight: Number(item.weight),
+      timestamp: Number(item.timestamp),
+    }))
+    .filter((item: LocalWeightRecord) => Number.isFinite(item.weight) && Number.isFinite(item.timestamp));
+}
+
+/**
+ * 保存本地体重记录
+ */
+function saveLocalWeightRecords(list: LocalWeightRecord[]) {
+  uni.setStorageSync(LOCAL_WEIGHT_KEY, JSON.stringify(list));
+}
+
+/**
+ * 合并本地体重记录
+ */
+function mergeLocalWeightRecords(record: LocalWeightRecord, list: LocalWeightRecord[]) {
+  const map = new Map<string, LocalWeightRecord>();
+  [record, ...list].forEach((item) => {
+    const key = `${item.timestamp}-${item.weight}`;
+    map.set(key, item);
+  });
+  return [...map.values()].sort((a, b) => b.timestamp - a.timestamp);
+}
+
+/**
+ * 合并体重趋势记录
+ */
+function mergeLatestWeightStats(list: UserHealthStats[], record: UserHealthStats) {
+  const map = new Map<string, UserHealthStats>();
+  [record, ...list].forEach((item) => {
+    const key = `${getRecordTimestamp(item.recordDate ?? '')}-${item.weight ?? ''}`;
+    map.set(key, item);
+  });
+  return [...map.values()];
+}
+
+/**
+ * 格式化记录时间
+ */
+function formatRecordDate(timestamp: number) {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hour}:${minute}`;
+}
+
+/**
+ * 打开新增活动记录弹窗
+ */
+function handleOpenActiveLog(type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'exercise') {
+  const configMap = {
+    breakfast: { activeType: 1, mealType: 1, showSnackPicker: false, title: '早餐' },
+    lunch: { activeType: 1, mealType: 3, showSnackPicker: false, title: '午餐' },
+    dinner: { activeType: 1, mealType: 5, showSnackPicker: false, title: '晚餐' },
+    snack: { activeType: 1, mealType: 2, showSnackPicker: true, title: '加餐' },
+    exercise: { activeType: 2, mealType: 0, showSnackPicker: false, title: '运动' },
+  };
+  activeLogConfig.value = configMap[type];
+  activeLogModalVisible.value = true;
+}
+
+/**
+ * 保存活动记录
+ */
+async function handleActiveLogSave(payload: ActiveLogCreatePayload) {
+  await HealthApi.createActiveLog(payload).then(() => {
+    uni.$u.toast('新增活动记录成功');
+  }).catch(() => {
+    uni.$u.toast('新增活动记录失败');
+  });
 }
 </script>
 
@@ -728,5 +1012,15 @@ function goToActiveLog() {
 .chart-svg {
   width: 100%;
   height: 100%;
+}
+
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 22rpx;
+  color: #9ca3af;
 }
 </style>
