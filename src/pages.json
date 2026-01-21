@@ -17,7 +17,7 @@
       }
     },
     {
-      "path": "pages/tab/list/index",
+      "path": "pages/tab/progress/index",
       "style": {
         "navigationBarTitleText": "进度"
       }
@@ -84,7 +84,7 @@
       "iconPath": "static/images/tabbar/home_cur.png",
       "selectedIconPath": "static/images/tabbar/home_cur.png"
     }, {
-      "pagePath": "pages/tab/list/index",
+      "pagePath": "pages/tab/progress/index",
       "text": "进度"
     }, {
       "pagePath": "pages/tab/user/index",
