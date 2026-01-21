@@ -19,7 +19,7 @@
     {
       "path": "pages/tab/list/index",
       "style": {
-        "navigationBarTitleText": "列表"
+        "navigationBarTitleText": "进度"
       }
     },
     {
@@ -85,7 +85,7 @@
       "selectedIconPath": "static/images/tabbar/home_cur.png"
     }, {
       "pagePath": "pages/tab/list/index",
-      "text": "列表"
+      "text": "进度"
     }, {
       "pagePath": "pages/tab/user/index",
       "text": "我的",

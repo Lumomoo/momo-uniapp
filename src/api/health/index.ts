@@ -14,24 +14,75 @@ enum URL {
   categoryList = '/health/category/list',
 }
 
+const HEALTH_INFO_CACHE_KEY_PREFIX = 'health_info_list_cache';
+const HEALTH_CATEGORY_CACHE_KEY = 'health_category_list_cache';
+
+/**
+ * 生成食物信息列表的缓存键
+ */
+const buildHealthInfoCacheKey = (params: HealthInfoQuery) => {
+  const query = params || ({} as HealthInfoQuery);
+  const normalized = Object.keys(query)
+    .sort()
+    .reduce((acc, key) => {
+      const value = (query as Record<string, unknown>)[key];
+      if (value !== undefined)
+        acc[key] = value;
+      return acc;
+    }, {} as Record<string, unknown>);
+  return `${HEALTH_INFO_CACHE_KEY_PREFIX}:${JSON.stringify(normalized)}`;
+};
+
+/**
+ * 读取缓存的JSON数据
+ */
+const getCacheJSON = <T>(key: string) => {
+  const raw = uni.getStorageSync(key);
+  if (!raw)
+    return null;
+
+  try {
+    return JSON.parse(raw) as T;
+  }
+  catch {
+    return null;
+  }
+};
+
+/**
+ * 写入缓存的JSON数据
+ */
+const setCacheJSON = (key: string, value: unknown) => {
+  uni.setStorageSync(key, JSON.stringify(value));
+};
+
 /**
  * 获取食物信息列表
  */
 export const getHealthInfoList = async (params: HealthInfoQuery) => {
+  const cacheKey = buildHealthInfoCacheKey(params);
+  const cachedList = getCacheJSON<HealthInfoItem[]>(cacheKey);
+  if (Array.isArray(cachedList))
+    return cachedList;
+
   const res = await get<HealthInfoListResponse | HealthInfoItem[]>({ url: URL.list, params });
-  if (Array.isArray(res))
-    return res;
-  return res.rows || [];
+  const list = Array.isArray(res) ? res : res.rows || [];
+  setCacheJSON(cacheKey, list);
+  return list;
 };
 
 /**
  * 获取食物分类列表
  */
 export const getHealthCategoryList = async () => {
+  const cachedList = getCacheJSON<HealthCategoryItem[]>(HEALTH_CATEGORY_CACHE_KEY);
+  if (Array.isArray(cachedList))
+    return cachedList;
+
   const res = await get<HealthCategoryListResponse | HealthCategoryItem[]>({ url: URL.categoryList });
-  if (Array.isArray(res))
-    return res;
-  return res.rows || [];
+  const list = Array.isArray(res) ? res : res.rows || [];
+  setCacheJSON(HEALTH_CATEGORY_CACHE_KEY, list);
+  return list;
 };
 
 /**
